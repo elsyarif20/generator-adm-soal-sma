@@ -1,0 +1,64 @@
+
+<!doctype html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generator Administrasi Guru & Bank Soal Adaptif | YPI Al-Ghozali</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+    .card-shadow {
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    .loading-spinner {
+      border: 3px solid #f3f4f6;
+      border-top: 3px solid #3b82f6;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .arabic-font-preview {
+        font-family: 'Arabic Typesetting', 'Traditional Arabic', serif;
+        direction: rtl;
+    }
+    .arabic-font-preview h1, 
+    .arabic-font-preview h2, 
+    .arabic-font-preview h3, 
+    .arabic-font-preview h4, 
+    .arabic-font-preview th,
+    .arabic-font-preview [contenteditable] {
+        text-align: right;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
+  }
+}
+</script>
+</head>
+<body class="h-full bg-gray-50">
+  <div id="root" class="min-h-full"></div>
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>

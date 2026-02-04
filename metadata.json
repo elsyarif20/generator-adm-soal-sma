@@ -1,0 +1,7 @@
+{
+  "name": "Generator Adm+Bank Soal+TO/UAS",
+  "description": "A smart platform to generate teaching materials and adaptive assessments specifically for SMA (High School) level, aligned with the 'Kurikulum Merdeka'.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
