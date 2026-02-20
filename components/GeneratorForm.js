@@ -227,7 +227,8 @@ const GeneratorForm = ({ module, onSubmit, onBack, onShowAIAssistant, isLoading,
                      React.createElement("select", { name: "kategori_ujian", value: formData.kategori_ujian || 'UAS', onChange: handleChange, className: formElementClasses },
                         React.createElement("option", { value: "TO" }, "TO (Try Out)"),
                         React.createElement("option", { value: "PTS" }, "PTS (Penilaian Tengah Semester)"),
-                        React.createElement("option", { value: "UAS" }, "UAS (Penilaian Akhir Semester)")
+                        React.createElement("option", { value: "UAS" }, "UAS (Penilaian Akhir Semester)"),
+                        React.createElement("option", { value: "PSAJ" }, "PSAJ (Penilaian Sumatif Akhir Jenjang)")
                      )
                 ),
                 

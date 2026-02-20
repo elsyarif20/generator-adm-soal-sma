@@ -1,9 +1,7 @@
 
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 
-// Helper function to safely get the AI client
 const getAiClient = () => {
-    // API key is handled by the environment and is assumed to be available.
     return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
@@ -93,31 +91,24 @@ export const getTopicSuggestions = async (formData) => {
     const ai = getAiClient();
     const response = await withRetry(() => ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Berikan daftar ide Topik/Materi Pembelajaran yang relevan untuk mata pelajaran ${formData.mata_pelajaran}, jenjang ${formData.jenjang}, kelas ${formData.kelas} untuk semester ${formData.semester}. Jika ini untuk Try Out, berikan materi spesifik Kelas 12 saja yang sering keluar di ujian akhir sekolah. Sajikan dalam format Markdown.`,
+        contents: `Berikan daftar ide Topik/Materi Pembelajaran yang relevan untuk mata pelajaran ${formData.mata_pelajaran}, jenjang ${formData.jenjang}, kelas ${formData.kelas} untuk semester ${formData.semester}. Jika ini untuk Try Out atau PSAJ, berikan materi spesifik yang sering keluar di ujian akhir jenjang. Sajikan dalam format Markdown.`,
     }));
     return response.text;
 };
 
 export const generateAdminContent = async (formData) => {
     const ai = getAiClient();
-    const harakatInstruction = formData.bahasa === 'Bahasa Arab' 
-        ? "**INSTRUKSI KHUSUS BAHASA ARAB: Seluruh teks Arab WAJIB MENGGUNAKAN HARAKAT LENGKAP.**"
-        : "";
-    const mathInstruction = "**FORMAT MATEMATIKA PENTING:** Jika menuliskan rumus atau angka berpangkat, WAJIB menggunakan superscript Unicode (seperti x², m³, 10⁻⁴). JANGAN GUNAKAN simbol caret (^).";
-
     const response = await withRetry(() => ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: `Anda adalah asisten ahli guru. Buat dokumen administrasi Kurikulum Merdeka.
         **Data:** ${formData.mata_pelajaran}, Kelas ${formData.kelas}, Fase ${formData.fase}, CP: ${formData.cp_elements}.
         Tugas: Generate ATP, Prota, Promes, Modul Ajar, KKTP, dan Jurnal Harian dalam format JSON.
-        ${harakatInstruction}
-        ${mathInstruction}
-        Gunakan tag '<table>' untuk semua dokumen.`,
+        Gunakan tag '<table>' dengan border standar untuk semua dokumen. Dilarang menggunakan notasi Markdown (seperti ** atau #) di dalam teks.`,
         config: {
             responseMimeType: 'application/json',
             responseSchema: sectionsSchema,
             temperature: 0.7,
-            ...(formData.use_thinking_mode && { thinkingConfig: { thinkingBudget: 32768 } })
+            thinkingConfig: { thinkingBudget: 32768 }
         }
     }));
 
@@ -127,51 +118,34 @@ export const generateAdminContent = async (formData) => {
 
 export const generateSoalContentSections = async (formData) => {
     const ai = getAiClient();
-    const mathInstruction = "**FORMAT MATEMATIKA PENTING:** Gunakan superscript Unicode (x², m³, 10⁻⁴) untuk pangkat. JANGAN GUNAKAN simbol caret (^).";
+    const jmlPg = Number(formData.jumlah_pg) || 30;
+    const jmlUraian = Number(formData.jumlah_uraian) || 5;
 
-    const formattingInstruction = `
-    **ATURAN TATA LETAK & FORMAT HTML (WAJIB DIPATUHI):**
-    1. Gunakan tag HTML yang valid untuk semua struktur.
-    2. **FORMAT SOAL:** Gunakan tag \`<ol>\` (Ordered List) sebagai pembungkus utama soal. Setiap butir soal harus berada di dalam tag \`<li>\`.
-    3. **JANGAN MENULIS NOMOR SECARA MANUAL.** Jangan menulis "1. Pertanyaan...", tapi tulislah \`<li>Pertanyaan...</li>\`. Biarkan browser yang memberikan nomor otomatis.
-    4. **FORMAT PILIHAN GANDA:** Di dalam \`<li>\` soal, opsi jawaban (A, B, C, D, E) **WAJIB** menggunakan nested list \`<ol type="A">\`. 
-       Contoh struktur yang BENAR:
-       \`<ol> <li> Pertanyaan soal disini? <ol type="A"> <li>Opsi satu</li> <li>Opsi dua</li> </ol> </li> </ol>\`
-    5. **KUNCI JAWABAN:** Sajikan dalam tabel HTML (\`<table>\`).
+    const strictFormatting = `
+    **INSTRUKSI KRITIKAL (WAJIB DIPATUHI):**
+    1. **JUMLAH SOAL:** Kamu WAJIB menghasilkan TEPAT ${jmlPg} soal Pilihan Ganda (PG) dan TEPAT ${jmlUraian} soal Uraian. Jangan menghentikan output sebelum mencapai angka tersebut.
+    2. **TIDAK ADA MARKDOWN:** DILARANG KERAS menggunakan simbol bintang dua (**), bintang satu (*), atau pagar (#) di dalam teks soal atau jawaban. Gunakan teks polos atau tag HTML <b> jika sangat perlu menebalkan.
+    3. **TATA LETAK SOAL PG:** Gunakan <ol> untuk daftar soal. Opsi A-E WAJIB menggunakan <ol type="A" class="choices">. Jangan gunakan tag <p> atau <div> di dalam <li> agar spasi di Word rapat.
+    4. **STRUKTUR DOKUMEN:** 
+       - Section 1: Kisi-kisi (Tabel: No, Materi, Indikator, Level, Bentuk, No Soal).
+       - Section 2: Naskah Soal (Gabungkan A. Pilihan Ganda dan B. Uraian di sini).
+       - Section 3: Kunci Jawaban.
+       - Section 4: Rubrik Penskoran.
+       - Section 5: Analisis Kualitatif (Tabel: Aspek, Indikator, Ya/Tidak, Keterangan).
     `;
-
-    const jmlPg = Number(formData.jumlah_pg) || 0;
-    const jmlUraian = Number(formData.jumlah_uraian) || 0;
-    
-    // TKA Configuration
-    const includeTka = !!formData.sertakan_soal_tka;
-    const jmlPgTka = includeTka ? (Number(formData.jumlah_soal_tka) || 0) : 0;
-    const jmlUraianTka = includeTka ? (Number(formData.jumlah_soal_tka_uraian) || 0) : 0;
-    
-    const harakatInstruction = formData.bahasa === 'Bahasa Arab' 
-        ? "Seluruh teks Arab WAJIB MENGGUNAKAN HARAKAT LENGKAP."
-        : "";
 
     const response = await withRetry(() => ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: `Anda adalah pembuat soal profesional. Buat Bank Soal lengkap.
-        **Data:** ${formData.mata_pelajaran}, Kelas ${formData.kelas}, Topik: ${formData.topik_materi}.
+        contents: `Buat paket asesmen lengkap untuk ${formData.mata_pelajaran}, Kelas ${formData.kelas}. Topik: ${formData.topik_materi}. 
+        Kategori: ${formData.kategori_ujian}.
         
-        ${formattingInstruction}
-        ${mathInstruction}
-        ${harakatInstruction}
-
-        Tugas detail:
-        1. Kisi-kisi Soal (Tabel).
-        2. Naskah Soal Pilihan Ganda (Total ${jmlPg + jmlPgTka} butir). Ini harus berisi ${jmlPg} soal standar dan ${jmlPgTka} soal TKA/HOTS. Gabungkan semuanya menjadi satu daftar berurutan. Gunakan struktur HTML <ol> untuk soal dan <ol type="A"> untuk opsi jawaban.
-        3. Naskah Soal Uraian (Total ${jmlUraian + jmlUraianTka} butir). Ini harus berisi ${jmlUraian} soal standar dan ${jmlUraianTka} soal TKA/HOTS. Gabungkan semuanya menjadi satu daftar berurutan. Gunakan struktur HTML <ol>.
-        4. Kunci Jawaban & Pedoman Penskoran (Tabel).
+        ${strictFormatting}
         `,
         config: {
             responseMimeType: 'application/json',
             responseSchema: sectionsSchema,
-            temperature: 0.7,
-            ...(formData.use_thinking_mode && { thinkingConfig: { thinkingBudget: 32768 } })
+            temperature: 0.5,
+            thinkingConfig: { thinkingBudget: 32768 }
         }
     }));
 
@@ -180,95 +154,21 @@ export const generateSoalContentSections = async (formData) => {
 };
 
 export const generateTryoutContent = async (formData) => {
-    const ai = getAiClient();
-    const mathInstruction = "**FORMAT MATEMATIKA PENTING:** Gunakan superscript Unicode (x², m³, 10⁻⁴) untuk pangkat. JANGAN GUNAKAN simbol caret (^).";
-    
-    const formattingInstruction = `
-    **ATURAN TATA LETAK (WAJIB):**
-    1. Gunakan tag \`<ol>\` untuk daftar soal agar penomoran otomatis.
-    2. Gunakan tag \`<ol type="A">\` untuk opsi jawaban Pilihan Ganda agar huruf (A, B, C, D, E) otomatis.
-    3. JANGAN tulis nomor/huruf manual (Contoh salah: "1. Soal"). Gunakan \`<li>Soal</li>\`.
-    `;
-
-    const jmlPg = Number(formData.jumlah_pg) || 0;
-    const jmlUraian = Number(formData.jumlah_uraian) || 0;
-    const jmlPgTka = Number(formData.jumlah_soal_tka) || 0;
-    const jmlUraianTka = Number(formData.jumlah_soal_tka_uraian) || 0;
-
-    const response = await withRetry(() => ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: `Anda adalah pembuat soal Ujian Sekolah. Buat paket Try Out UAS Kelas 12.
-        **Materi:** ${formData.topik_materi}.
-        **Kelompok:** ${formData.kelompok_tka}.
-
-        ${formattingInstruction}
-        ${mathInstruction}
-
-        Tugas:
-        1. Kisi-kisi (Tabel).
-        2. Naskah Soal Pilihan Ganda (Total ${jmlPg + jmlPgTka} butir). Gabungkan ${jmlPg} soal standar dan ${jmlPgTka} soal TKA Akademik - ${formData.kelompok_tka} menjadi satu daftar berurutan. Soal TKA harus HOTS/Setara UTBK. Gunakan struktur HTML <ol> dan <ol type="A">.
-        3. Naskah Soal Uraian (Total ${jmlUraian + jmlUraianTka} butir). Gabungkan ${jmlUraian} soal standar dan ${jmlUraianTka} soal TKA Akademik - ${formData.kelompok_tka} menjadi satu daftar berurutan. Gunakan struktur HTML <ol>.
-        4. Kunci Jawaban Lengkap (Tabel).`,
-        config: {
-            responseMimeType: 'application/json',
-            responseSchema: sectionsSchema,
-            temperature: 0.7,
-            ...(formData.use_thinking_mode && { thinkingConfig: { thinkingBudget: 32768 } })
-        }
-    }));
-
-    const result = cleanAndParseJson(response.text);
-    return result.sections;
+    return generateSoalContentSections(formData);
 };
 
 export const generateSuperContent = async (formData, textContent) => {
     const ai = getAiClient();
-    const harakatInstruction = formData.bahasa === 'Bahasa Arab' 
-        ? "**INSTRUKSI KHUSUS BAHASA ARAB: Seluruh teks Arab WAJIB MENGGUNAKAN HARAKAT LENGKAP.**"
-        : "";
-    const mathInstruction = "**FORMAT MATEMATIKA PENTING:** Jika menuliskan rumus atau angka berpangkat, WAJIB menggunakan superscript Unicode (seperti x², m³, 10⁻⁴). JANGAN GUNAKAN simbol caret (^).";
-    
-    const formattingInstruction = `
-    **ATURAN TATA LETAK & FORMAT HTML (WAJIB DIPATUHI):**
-    1. Gunakan tag HTML yang valid untuk semua struktur.
-    2. **FORMAT SOAL:** Gunakan tag \`<ol>\` (Ordered List) sebagai pembungkus utama soal. Setiap butir soal harus berada di dalam tag \`<li>\`.
-    3. **JANGAN MENULIS NOMOR SECARA MANUAL.** Jangan menulis "1. Pertanyaan...", tapi tulislah \`<li>Pertanyaan...</li>\`. Biarkan browser yang memberikan nomor otomatis.
-    4. **FORMAT PILIHAN GANDA:** Di dalam \`<li>\` soal, opsi jawaban (A, B, C, D, E) **WAJIB** menggunakan nested list \`<ol type="A">\`. 
-       Contoh struktur yang BENAR:
-       \`<ol> <li> Pertanyaan soal disini? <ol type="A"> <li>Opsi satu</li> <li>Opsi dua</li> </ol> </li> </ol>\`
-    5. **KUNCI JAWABAN:** Sajikan dalam tabel HTML (\`<table>\`).
-    `;
-
     const response = await withRetry(() => ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: `Anda adalah asisten ahli guru yang sangat canggih. Berdasarkan teks buku ajar yang disediakan, buat DUA jenis dokumen secara bersamaan dalam satu output JSON:
-1.  **Dokumen Administrasi Kurikulum Merdeka Lengkap:** ATP, Prota, Promes, 1 Modul Ajar representatif, KKTP, dan Jurnal Harian.
-2.  **Bank Soal Lengkap:** Kisi-kisi Soal, 15 Soal Pilihan Ganda (opsi A-E), 5 Soal Uraian, dan Kunci Jawaban beserta Pedoman Penskoran.
-
-**Data Kontekstual:**
-- Mata Pelajaran: ${formData.mata_pelajaran}
-- Kelas: ${formData.kelas}
-- Semester: ${formData.semester}
-- Sekolah: ${formData.sekolah}
-- Guru: ${formData.nama_guru}
-- Tahun Ajaran: ${formData.tahun_ajaran}
-
-**Teks Buku Ajar untuk dianalisis:**
-"""
-${textContent}
-"""
-
-**ATURAN KETAT (WAJIB DIPATUHI):**
-- Format output HARUS JSON.
-- Gunakan tag \`<table>\` untuk semua dokumen tabel (ATP, Prota, Promes, Kisi-kisi, Kunci Jawaban).
-- ${formattingInstruction}
-- ${mathInstruction}
-- ${harakatInstruction}`,
+        contents: `Berdasarkan teks ini: """${textContent}""", buat Administrasi Guru dan Bank Soal Lengkap.
+        Wajib menyertakan Tabel Kisi-kisi, Naskah Soal PG & Uraian (Gabung dalam satu section tanpa Markdown **), Kunci Jawaban, Rubrik, dan Analisis Kualitatif.
+        Pastikan jumlah soal PG minimal 30 dan Uraian 5. Dilarang menggunakan bintang dua (**).`,
         config: {
             responseMimeType: 'application/json',
             responseSchema: sectionsSchema,
-            temperature: 0.7,
-            ...(formData.use_thinking_mode && { thinkingConfig: { thinkingBudget: 32768 } })
+            temperature: 0.5,
+            thinkingConfig: { thinkingBudget: 32768 }
         }
     }));
 
